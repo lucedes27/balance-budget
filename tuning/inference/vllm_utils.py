@@ -7,8 +7,14 @@ from tuning.inference.config_inference import VLLMSamplingParamsConfig
 def load_vlm_model(model_name: str) -> LLM:
     model_path = f"{MODELS_DIR}/{model_name}"
     print(f"Loading model from {model_path}")
-    
-    llm = LLM(model=model_path)
+
+    gpu_util = float(os.getenv("VLLM_GPU_MEMORY_UTILIZATION", "0.80"))
+    print(f"Using GPU memory utilization: {gpu_util}")
+
+    llm = LLM(
+        model=model_path,
+        gpu_memory_utilization=gpu_util
+    )
     sampling_params = SamplingParams(
         **VLLMSamplingParamsConfig().model_dump()
     )
