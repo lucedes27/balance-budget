@@ -33,6 +33,7 @@ class LoraConfig(BaseModel):
     loftq_config: str = None
 
 class TrainingArgumentsConfig(BaseModel):
+    # sft training parameters
     per_device_train_batch_size: int = 4
     per_device_eval_batch_size: int = 8
     eval_steps: float = 0.1

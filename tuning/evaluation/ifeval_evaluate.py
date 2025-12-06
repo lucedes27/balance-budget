@@ -3,10 +3,11 @@ import subprocess
 
 
 def ifeval_evaluate(model_name: str):
-
     print(f"Running IFeval evaluation for {model_name}")
 
     output_path = f"{IFEVAL_OUTPUTS_DIR}/{model_name}/{RESPONSES_FILENAME}"
+    output_path =  f"{IFEVAL_OUTPUTS_DIR}/{model_name}/responses.jsonl"
+
 
     subprocess.run([
         'python3', '-m', 'instruction_following_eval.evaluation_main',
@@ -17,4 +18,4 @@ def ifeval_evaluate(model_name: str):
 
 
 if __name__ == "__main__":
-    ifeval_evaluate(f"llama3-8B_pt-tuluif-10000_beta-0-01")
+    ifeval_evaluate(f"llama3-8B_sft-tuluif-5000_pt-tuluif-5000")

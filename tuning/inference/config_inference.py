@@ -7,6 +7,7 @@ class VLLMSamplingParamsConfig(BaseModel):
     top_p: float = 0.9
     stop: list[str] = ["<|im_end|>", "<|end_of_text|>"]
     # repetition_penalty: float = 1.1
+    n: int = 1
 
 
 if __name__ == "__main__":

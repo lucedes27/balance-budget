@@ -92,6 +92,8 @@ def train_model_sft(
     with open(f"{run_config.output_dir}/training_config.json", "w") as f:
         json.dump(args, f, indent=4)
 
+    return model, tokenizer, trainer
+
 
 
 if __name__ == "__main__":

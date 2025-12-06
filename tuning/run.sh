@@ -3,10 +3,10 @@
 train_sizes=( 100 ) #1000 10000 )
 
 # Set boolean config values to "n" by default
-export DO_TRAINING="n"
-export DO_INFERENCE="n"
-export DO_EVALUATION="n"
-export DO_SFT_FIRST="n"
+export DO_TRAINING="${DO_TRAINING:-n}"
+export DO_INFERENCE="${DO_INFERENCE:-n}"
+export DO_EVALUATION="${DO_EVALUATION:-n}"
+export DO_SFT_FIRST="${DO_SFT_FIRST:-n}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in

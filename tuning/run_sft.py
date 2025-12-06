@@ -4,11 +4,9 @@ from tuning.config import HF_MODEL_MAP
 from tuning.training.sft_training import train_model_sft
 from tuning.run_inference import run_inference
 from tuning.run_evaluation import run_evaluation
-
 import argparse
 
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser(description="SFT training")
 
     parser.add_argument("--model", type=str, help="llama3-8B", required=True)
@@ -52,18 +50,37 @@ if __name__ == "__main__":
         run = wandb.init(name=run_config.run_name, project="tuning", reinit=True)
 
         with run:
-            train_model_sft(
+            model, tokenizer, trainer = train_model_sft(
                 run_config = run_config,
                 lora_config = lora_config,
                 model_load_config = model_load_config,
                 training_args = training_args,
             )
+            import gc, torch, subprocess
+            del model
+            del tokenizer
+            del trainer
+            gc.collect()
+            torch.cuda.empty_cache()
+            result = subprocess.run( 
+                ["nvidia-smi", "--query-gpu=utilization.gpu,memory.used,memory.total", "--format=csv,nounits,noheader"],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+            )
+            print("GPU Utilization [% GPU, MB used, MB total]:", result.stdout.strip())
+            import time, torch
+            torch.cuda.empty_cache()
+            time.sleep(30)
+
 
     if run_config.do_inference:
         run_inference(run_config)
+        torch.cuda.empty_cache()
+        time.sleep(30)
 
     if run_config.do_evaluation:
         run_evaluation(run_config)
+        torch.cuda.empty_cache()
+        time.sleep(30)
 
 
     print(f"********" * 20) 

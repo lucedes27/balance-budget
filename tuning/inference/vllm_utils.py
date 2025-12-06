@@ -2,9 +2,9 @@ from tuning.utils.utils import chat_template_func
 from vllm import LLM, SamplingParams
 from tuning.config import MODELS_DIR
 from tuning.inference.config_inference import VLLMSamplingParamsConfig
+import os
 
-
-def load_vlm_model(model_name: str) -> LLM:
+def load_vlm_model(model_name: str, max_logprobs = 20) -> LLM:
     model_path = f"{MODELS_DIR}/{model_name}"
     print(f"Loading model from {model_path}")
 
@@ -13,6 +13,7 @@ def load_vlm_model(model_name: str) -> LLM:
 
     llm = LLM(
         model=model_path,
+        max_logprobs = max_logprobs,
         gpu_memory_utilization=gpu_util
     )
     sampling_params = SamplingParams(
@@ -22,7 +23,6 @@ def load_vlm_model(model_name: str) -> LLM:
     return llm, sampling_params
 
 def make_vllm_call(llm: LLM, sampling_params: SamplingParams, prompts: list[str]) -> list[str]:
-        
     tokenizer = llm.get_tokenizer()
     tokenizer = chat_template_func(tokenizer)
     chat_template = tokenizer.chat_template
@@ -52,11 +52,17 @@ def generate_responses_vllm(llm: LLM, sampling_params: SamplingParams, prompts: 
 
     responses = make_vllm_call(llm, sampling_params, dataset)
 
-    results = [
-        {
-            "prompt": prompt,
-            "response": response,
-        }
-        for prompt, response in zip(prompts, responses)
-    ]
+    results = []
+    for prompt, response_group in zip(prompts, responses):
+        if sampling_params.n > 1 and isinstance(response_group, list):
+            # This handles the case where n > 1 and make_vllm_call returns a list of responses for a prompt
+            for single_response in response_group:
+                results.append({"prompt": prompt, "response": single_response})
+        else:
+            # This handles the case where n == 1 and response_group is a single string
+            results.append({"prompt": prompt, "response": response_group})
+        
     return results
+    
+
+

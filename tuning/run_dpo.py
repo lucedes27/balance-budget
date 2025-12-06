@@ -81,13 +81,20 @@ if __name__ == "__main__":
                     model_load_config = model_load_config,
                     training_args = training_args,
                 )
+            import time, torch
+            torch.cuda.empty_cache()
+            time.sleep(30)
                 
 
     if run_config.do_inference:
         run_inference(run_config)
+        torch.cuda.empty_cache()
+        time.sleep(30)
 
     if run_config.do_evaluation:
         run_evaluation(run_config)
+        torch.cuda.empty_cache()
+        time.sleep(30)
 
 
 

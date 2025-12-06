@@ -28,7 +28,13 @@ def get_train_dataset(run_config: Union[PTRunConfig, SFTRunConfig]) -> DatasetDi
     print(f"Checking for dataset at {check_path}")
     if Path(check_path).exists():
         print(f"Dataset already exists at {check_path}")
-        return load_from_disk(check_path)
+
+        full_dataset = load_from_disk(check_path)
+        print(f"Sampled dataset: {full_dataset}")
+        print(f"Example training row: {full_dataset['train'][0]}")
+        print(f"Example evaluation row: {full_dataset['test'][0]}")
+
+        return full_dataset
 
     train_size = run_config.dataset_config.train_size
     
@@ -39,7 +45,8 @@ def get_train_dataset(run_config: Union[PTRunConfig, SFTRunConfig]) -> DatasetDi
 
     sampled_dataset = get_random_train_subset(full_dataset, train_size)
     print(f"Sampled dataset: {sampled_dataset}")
-    print(f"Example row: {sampled_dataset['train'][0]}")
+    print(f"Example training row: {sampled_dataset['train'][0]}")
+    print(f"Example evaluation row: {sampled_dataset['test'][0]}")
 
     sampled_dataset.save_to_disk(f"{DATASETS_DIR}/{dataset_stub}-{train_size}")
 
@@ -51,7 +58,7 @@ if __name__ == "__main__":
             model_name="llama3-8B",
             task_name="math",
             dataset_config=DatasetConfig(
-                dataset="gsm8k",
+                dataset="tuluif", #gsm8k
                 dataset_type="sft",
                 train_size=10000,
             ),

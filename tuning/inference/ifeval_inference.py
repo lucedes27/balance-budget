@@ -5,6 +5,7 @@ from tuning.utils.gpt_utils import save_responses
 
 def run_inference_ifeval(model_name: str):
     test_dataset = get_ifeval_test_dataset()
+    # print(test_dataset["prompt"], test_dataset["messages"])
 
     llm, sampling_params = load_vlm_model(model_name)
     responses = generate_responses_vllm(llm = llm,
@@ -12,12 +13,8 @@ def run_inference_ifeval(model_name: str):
                                         prompts = test_dataset["prompt"],
                                         dataset = test_dataset["messages"]
                                         )
-    
     save_path = f"{IFEVAL_OUTPUTS_DIR}/{model_name}/"
     save_responses(save_path, RESPONSES_FILENAME, responses)
 
 if __name__ == "__main__":
-
-    import time
-
-    run_inference_ifeval("llama3-8B_pt-tuluif-10000")
+    run_inference_ifeval("llama3-8B_sft-tuluif-20")

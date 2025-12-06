@@ -10,6 +10,6 @@ def run_inference(run_config: Union[SFTRunConfig, PTRunConfig]):
     if task_name == "instruction":
         run_inference_ifeval(model_name)
     elif task_name == "math":
-            print(f"GSM8k inference is run during evaluation")
+        print(f"GSM8k inference is run during evaluation")
     else:
         raise ValueError(f"Task {task_name} not supported")
