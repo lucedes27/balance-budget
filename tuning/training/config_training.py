@@ -35,7 +35,7 @@ class LoraConfig(BaseModel):
 
 class TrainingArgumentsConfig(BaseModel):
     # sft training parameters
-    per_device_train_batch_size: int = 1
+    per_device_train_batch_size: int = 8
     gradient_accumulation_steps: int = EFFECTIVE_BATCH_SIZE // per_device_train_batch_size # one opt step uses effective_batch_size data
     per_device_eval_batch_size: int = 8
     eval_strategy: str = "steps"
@@ -49,7 +49,7 @@ class TrainingArgumentsConfig(BaseModel):
     weight_decay: float = 0.01
     lr_scheduler_type: str = "cosine"
     report_to: list[str] = ["wandb"]
-    save_strategy: str = "no"
+    save_strategy: str = "steps"
     save_steps: int = 20 # each checkpoint step is one gradient weight update (optimizer.step()), data = grad_acc * batch_size * save_steps = effective_batch_size * save_steps
     save_total_limit: int = 1
     load_best_model_at_end: bool = False

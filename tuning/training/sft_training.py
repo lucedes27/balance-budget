@@ -1,7 +1,7 @@
 from unsloth import FastLanguageModel, is_bfloat16_supported
 
 from trl import SFTTrainer
-from transformers import TrainingArguments
+from transformers import TrainingArguments, EarlyStoppingCallback
 from tuning.data.train_dataset import get_train_dataset
 from tuning.training.config_training import ModelLoadConfig, LoraConfig, SFTRunConfig, TrainingArgumentsConfig, PassAtKConfig, sft_batch_size, effective_batch_size
 from tuning.training.perplexity_callback import PerplexityStoppingCallback
@@ -16,6 +16,33 @@ from tuning.config import DATASETS_DIR, HF_MODEL_MAP
 import os
 from tuning.training.config_training import DatasetConfig, SFTRunConfig
 from tuning.config import MODELS_DIR
+
+def create_passk_compute_metrics(passk_callback):
+    """Create a compute_metrics function that uses the PassAtK callback for evaluation."""
+    
+    def compute_metrics(eval_preds):
+        # Get the model from the trainer (this will be set when trainer calls this)
+        model = compute_metrics._trainer.model
+        
+        # Use the PassAtK callback to evaluate
+        scores = passk_callback.evaluate_pass_at_k(model)
+        
+        # Return metrics in the format expected by trainer.evaluate()
+        metrics = {}
+        for k in passk_callback.k_values:
+            metrics[f"pass_at_{k}"] = scores[f"pass_at_{k}"]
+        print(f"[Compute Metrics] Final metrics: {metrics}")
+        return metrics
+    
+    return compute_metrics
+
+def create_ppl_compute_metrics(ppl_callback):
+    def compute_metrics(eval_preds):
+        model = compute_metrics._trainer.model
+        return ppl_callback.evaluate_perplexity(model)
+
+
+
 
 def train_model_sft(
     run_config: SFTRunConfig = None,
@@ -62,6 +89,8 @@ def train_model_sft(
 
     # Setup callbacks
     callbacks = []
+    compute_metrics_fn = None
+
     if passk_config is not None and passk_config.enabled:
         passk_callback = PassAtKStoppingCallback(
             target_pass_at_k=passk_config.target_pass_at_k,  
@@ -73,11 +102,18 @@ def train_model_sft(
             max_tokens=passk_config.max_tokens,
             strict=passk_config.strict,
             model_name=run_config.model_name,
-            
         )
-        callbacks.append(passk_callback)
+        # callbacks.append(passk_callback)
+        compute_metrics_fn = create_passk_compute_metrics(passk_callback)
+        early_stopping = EarlyStoppingCallback(
+            early_stopping_patience=1,
+            early_stopping_threshold=0.01,
+        )
+        callbacks.append(early_stopping)
         print(f"[SFT] Will stop training when pass@{passk_config.k_values[0]} >= {passk_config.target_pass_at_k[-1]}")
         print(f"[SFT] Checkpoints will be saved at thresholds: {passk_config.target_pass_at_k}")
+
+        
 
     if perplexity_thresholds is not None:
         # Load raw dataset (without chat template applied) for perplexity evaluation
@@ -90,12 +126,20 @@ def train_model_sft(
             tokenizer=chat_template_func(tokenizer),
             num_samples=200,  
         )
-        callbacks.append(perplexity_callback)
+        # callbacks.append(perplexity_callback)
+        compute_metrics_fn = create_ppl_compute_metrics(perplexity_callback)
+        early_stopping = EarlyStoppingCallback(
+            early_stopping_patience=1,
+            early_stopping_threshold=0.01,
+        )
+        callbacks.append(early_stopping)
         print(f"[SFT] Perplexity thresholds: {perplexity_thresholds}")
         print(f"[SFT] Will checkpoint at each threshold and stop at final: {min(perplexity_thresholds)}")
 
    
-
+    callbacks = [EarlyStoppingCallback(early_stopping_patience=1, early_stopping_threshold=0.5)] 
+    # https://github.com/huggingface/transformers/blob/v5.0.0/src/transformers/trainer_callback.py#L703 
+    # we need to set save_strategy, save_steps and load_best_model_at_end in TrainingArguments for this to work properly
     trainer = SFTTrainer(
         model = model,
         tokenizer = chat_template_func(tokenizer),
@@ -106,6 +150,7 @@ def train_model_sft(
         dataset_num_proc = 2,
         packing = False,
         callbacks = callbacks if callbacks else None,
+        # compute_metrics = compute_metrics_fn if compute_metrics_fn else None,
         args = TrainingArguments(
             per_device_train_batch_size = training_args.per_device_train_batch_size,
             gradient_accumulation_steps = training_args.gradient_accumulation_steps,
@@ -113,6 +158,9 @@ def train_model_sft(
             eval_steps = training_args.eval_steps,
             do_eval = training_args.do_eval,
             eval_strategy = training_args.eval_strategy,
+            metric_for_best_model = "eval_loss",
+            load_best_model_at_end = True,
+            greater_is_better = False,
             warmup_ratio = training_args.warmup_ratio,
             num_train_epochs = training_args.num_train_epochs,
             learning_rate = training_args.learning_rate,
@@ -122,18 +170,21 @@ def train_model_sft(
             report_to = training_args.report_to,
             logging_steps = training_args.logging_steps,
             output_dir = run_config.output_dir,
-            save_strategy = training_args.save_strategy,
-            save_steps = training_args.save_steps,
+            # save_strategy = training_args.save_strategy,
+            save_strategy = "steps",
+            save_steps = training_args.eval_steps,  # Must match eval_steps for early stopping
             save_total_limit = training_args.save_total_limit,
-            load_best_model_at_end = training_args.load_best_model_at_end,
+            # load_best_model_at_end = training_args.load_best_model_at_end,
             dataloader_drop_last = training_args.dataloader_drop_last,
             fp16 = not is_bfloat16_supported(),
             bf16 = is_bfloat16_supported(),
             seed = 42,
         ),
     )
-    args = trainer.args.to_dict()
 
+    if compute_metrics_fn: compute_metrics_fn._trainer = trainer
+
+    args = trainer.args.to_dict()
     print(args)
     
     # Resume from checkpoint if it exists
@@ -144,6 +195,15 @@ def train_model_sft(
             resume_from_checkpoint = str(max(checkpoints, key=lambda x: int(x.name.split("-")[1])))
             print(f"[SFT] Resuming from checkpoint: {resume_from_checkpoint}")
     
+
+    print("[DEBUG] Testing manual evaluation...")
+    try:
+        eval_result = trainer.evaluate()
+        print(f"[DEBUG] Manual eval result: {eval_result}")
+        print(f"[DEBUG] Available metrics: {list(eval_result.keys())}")
+    except Exception as e:
+        print(f"[DEBUG] Manual evaluation failed: {e}")
+
     trainer_stats = trainer.train(resume_from_checkpoint=resume_from_checkpoint) 
     # weights, opt, scheduler, step counter
 
